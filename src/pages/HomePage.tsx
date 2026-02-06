@@ -127,6 +127,28 @@ export function HomePage(props: {
         </aside>
 
         <main className="main">
+          <div className="mobileProjectPicker">
+            <div className="card">
+              <div className="cardTitle">Projects</div>
+              <select
+                value={props.selectedId ?? ''}
+                onChange={(e) => {
+                  const id = e.target.value
+                  if (id) props.onSelect(id)
+                }}
+              >
+                {props.projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <div className="muted" style={{ marginTop: 8 }}>
+                projects={props.projects.length}
+              </div>
+            </div>
+          </div>
+
           {!selected ? (
             <div className="empty">Select a project</div>
           ) : (

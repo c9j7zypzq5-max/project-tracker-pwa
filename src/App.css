@@ -27,7 +27,11 @@
 @media (max-width: 860px){
   .sidebar{display:none;}
   .rowCards{grid-template-columns:1fr;}
+  .mobileProjectPicker{display:block;}
 }
+
+.mobileProjectPicker{display:none; margin-bottom:12px;}
+.mobileProjectPicker select{width:100%; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.10); border-radius:10px; padding:10px; color:#e6edf3;}
 
 .card{background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:12px;}
 .cardTitle{font-weight:700; margin-bottom:10px;}
