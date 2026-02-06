@@ -6,3 +6,4 @@ export type Route =
   | { name: 'addAIResource'; projectId: string }
   | { name: 'addTimeResource'; projectId: string }
   | { name: 'search' }
+  | { name: 'settings' }

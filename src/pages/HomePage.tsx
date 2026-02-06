@@ -17,6 +17,7 @@ export function HomePage(props: {
   onSelect: (id: ID) => void
   onNewProject: () => void
   onSearch: () => void
+  onSettings: () => void
 
   updates: ProjectUpdate[]
   todos: Todo[]
@@ -32,6 +33,10 @@ export function HomePage(props: {
 
   onRepairData: () => void
   onResetData: () => void
+
+  onSyncGitHub: () => void
+  syncStatus: 'idle' | 'syncing' | 'error'
+  syncError: string | null
 }) {
   const selected = useMemo(() => props.projects.find((p) => p.id === props.selectedId) ?? null, [props.projects, props.selectedId])
 
@@ -98,6 +103,7 @@ export function HomePage(props: {
         <div className="brand">Project Tracker (PWA)</div>
         <div className="actions" style={{ display: 'flex', gap: 8 }}>
           <button onClick={props.onSearch}>Search</button>
+          <button onClick={props.onSettings}>Settings</button>
           <button onClick={exportAll}>Export</button>
           <button onClick={props.onNewProject}>+ Project</button>
         </div>
@@ -183,7 +189,13 @@ export function HomePage(props: {
                             style={{ flex: 1 }}
                             value={t.title}
                             onChange={(e) => props.onEditTodoTitle(t.id, e.target.value)}
+                            disabled={t.source === 'github'}
                           />
+                          {t.url ? (
+                            <a className="pill" href={t.url} target="_blank" rel="noreferrer">
+                              GH
+                            </a>
+                          ) : null}
                         </div>
                       </li>
                     ))}
@@ -286,12 +298,21 @@ export function HomePage(props: {
                 <div className="muted">Stored locally in your browser (offline-first).</div>
 
                 <div className="smallActions" style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button onClick={props.onSyncGitHub} disabled={props.syncStatus === 'syncing'}>
+                    {props.syncStatus === 'syncing' ? 'Syncing…' : 'Sync GitHub Issues'}
+                  </button>
                   <button onClick={props.onRepairData}>Repair / add missing core projects</button>
                   <button onClick={props.onResetData}>Reset local data</button>
                 </div>
 
+                {props.syncStatus === 'error' && props.syncError ? (
+                  <div className="muted" style={{ marginTop: 10, color: '#fecaca' }}>
+                    Sync error: {props.syncError}
+                  </div>
+                ) : null}
+
                 <div className="muted" style={{ marginTop: 10 }}>
-                  Debug: projects={props.projects.length}
+                  Debug: projects={props.projects.length} · todos={props.todos.length}
                 </div>
               </div>
             </div>

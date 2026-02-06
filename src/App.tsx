@@ -10,6 +10,7 @@ import {
   type ID,
   type Project,
 } from './lib/storage'
+import { syncGitHubIssuesIntoDB } from './lib/syncIssues'
 import type { Route } from './pages/types'
 import { HomePage } from './pages/HomePage'
 import { NewProjectPage } from './pages/NewProjectPage'
@@ -17,12 +18,15 @@ import { AddUpdatePage } from './pages/AddUpdatePage'
 import { AddTimeResourcePage } from './pages/AddTimeResourcePage'
 import { AddAIResourcePage } from './pages/AddAIResourcePage'
 import { SearchPage } from './pages/SearchPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 export default function App() {
   const { db, write } = useLocalDB()
 
   const [selectedId, setSelectedId] = useState<ID | null>(db.projects[0]?.id ?? null)
   const [route, setRoute] = useState<Route>({ name: 'home' })
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle')
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   // Keep selectedId valid as projects appear/disappear
   const projectsSorted = useMemo(() => {
@@ -121,6 +125,14 @@ export default function App() {
     )
   }
 
+  if (route.name === 'settings') {
+    return (
+      <SettingsPage
+        onCancel={() => setRoute({ name: 'home' })}
+      />
+    )
+  }
+
   return (
     <HomePage
       projects={projectsSorted}
@@ -128,6 +140,7 @@ export default function App() {
       onSelect={(id) => setSelectedId(id)}
       onNewProject={() => setRoute({ name: 'newProject' })}
       onSearch={() => setRoute({ name: 'search' })}
+      onSettings={() => setRoute({ name: 'settings' })}
       updates={db.updates}
       todos={db.todos}
       resources={db.resources}
@@ -138,6 +151,7 @@ export default function App() {
         write((db) => {
           const t = db.todos.find((x) => x.id === todoId)
           if (!t) return
+          if (t.source === 'github') return
           t.done = !t.done
           t.updatedAt = new Date().toISOString()
           touchProject(db, t.projectId)
@@ -147,6 +161,7 @@ export default function App() {
         write((db) => {
           const t = db.todos.find((x) => x.id === todoId)
           if (!t) return
+          if (t.source === 'github') return
           t.title = title
           t.updatedAt = new Date().toISOString()
           touchProject(db, t.projectId)
@@ -169,6 +184,30 @@ export default function App() {
         localStorage.removeItem('pt.db.v1')
         location.reload()
       }}
+      onSyncGitHub={async () => {
+        try {
+          setSyncStatus('syncing')
+          setSyncError(null)
+          await new Promise((r) => setTimeout(r, 50))
+
+          // Fetch and then write in one atomic update
+          const cloned = structuredClone(db)
+          await syncGitHubIssuesIntoDB(cloned as any)
+          write((db2) => {
+            db2.projects = cloned.projects
+            db2.todos = cloned.todos
+            db2.updates = cloned.updates
+            db2.resources = cloned.resources
+          })
+
+          setSyncStatus('idle')
+        } catch (e) {
+          setSyncStatus('error')
+          setSyncError(e instanceof Error ? e.message : String(e))
+        }
+      }}
+      syncStatus={syncStatus}
+      syncError={syncError}
     />
   )
 }

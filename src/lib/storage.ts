@@ -24,6 +24,8 @@ export type Todo = {
   updatedAt: string
   title: string
   done: boolean
+  source?: 'local' | 'github'
+  url?: string
 }
 
 // MVP resource tracking focuses on:
@@ -48,7 +50,7 @@ export type ResourceEntry = {
   note?: string
 }
 
-type DB = {
+export type DB = {
   projects: Project[]
   updates: ProjectUpdate[]
   todos: Todo[]
@@ -171,6 +173,7 @@ export function createTodo(projectId: ID, title: string): Todo {
     updatedAt: ts,
     title,
     done: false,
+    source: 'local',
   }
 }
 
