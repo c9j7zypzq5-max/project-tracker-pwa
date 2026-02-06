@@ -80,85 +80,64 @@ export function saveDB(db: DB) {
   localStorage.setItem(KEY, JSON.stringify(db))
 }
 
+function ensureCoreProjects(db: DB): boolean {
+  const coreNames = ['Project Tracker PWA', 'Project Tracker iOS', 'PC-Compare', 'FoodAO']
+
+  let changed = false
+  for (const name of coreNames) {
+    if (!db.projects.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())) {
+      const ts = nowIso()
+      db.projects.push({
+        id: uuid(),
+        name,
+        stage: name === 'Project Tracker PWA' ? 'Build' : '',
+        progress: name === 'Project Tracker PWA' ? 40 : 0,
+        createdAt: ts,
+        updatedAt: ts,
+      })
+      changed = true
+    }
+  }
+
+  // If we just created the PWA project, add some starter updates/todos.
+  const pwa = db.projects.find((p) => p.name.trim().toLowerCase() === 'project tracker pwa')
+  if (pwa) {
+    const hasAny = db.updates.some((u) => u.projectId === pwa.id) || db.todos.some((t) => t.projectId === pwa.id)
+    if (!hasAny) {
+      db.updates.push({
+        id: uuid(),
+        projectId: pwa.id,
+        date: nowIso(),
+        text: 'Bootstrap PWA (offline-first) + GitHub Pages deploy',
+        milestone: true,
+      })
+      db.todos.push(createTodo(pwa.id, 'Replace prompt() with dedicated pages'))
+      db.todos.push(createTodo(pwa.id, 'Add export JSON/CSV'))
+      db.todos.push(createTodo(pwa.id, 'Add search (projects + updates + resources)'))
+      changed = true
+    }
+  }
+
+  return changed
+}
+
+// Seed for first run, and migrate existing installs by ensuring core projects exist.
 export function seedIfEmpty(): DB {
   const db = loadDB()
-  if (db.projects.length > 0) return db
 
-  const projects = [
-    'Project Tracker PWA',
-    'Project Tracker iOS',
-    'PC-Compare',
-    'FoodAO',
-  ].map((name, i) => {
-    const ts = nowIso()
-    return {
-      id: uuid(),
-      name,
-      stage: i === 0 ? 'Build' : '',
-      progress: i === 0 ? 40 : 0,
-      createdAt: ts,
-      updatedAt: ts,
-    } satisfies Project
-  })
+  if (db.projects.length === 0) {
+    // First run: add core projects + starter items
+    ensureCoreProjects(db)
+    saveDB(db)
+    return db
+  }
 
-  const updates: ProjectUpdate[] = [
-    {
-      id: uuid(),
-      projectId: projects[0].id,
-      date: nowIso(),
-      text: 'Bootstrap PWA (offline-first) + GitHub Pages deploy',
-      milestone: true,
-    },
-    {
-      id: uuid(),
-      projectId: projects[0].id,
-      date: nowIso(),
-      text: 'Next: proper forms → export → search',
-      milestone: false,
-    },
-  ]
+  // Existing install: ensure core projects exist (non-destructive)
+  if (ensureCoreProjects(db)) {
+    saveDB(db)
+  }
 
-  const todos: Todo[] = [
-    {
-      id: uuid(),
-      projectId: projects[0].id,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      title: 'Replace prompt() with dedicated pages',
-      done: false,
-    },
-    {
-      id: uuid(),
-      projectId: projects[0].id,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      title: 'Add export JSON/CSV',
-      done: false,
-    },
-    {
-      id: uuid(),
-      projectId: projects[0].id,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      title: 'Add search (projects + updates + resources)',
-      done: false,
-    },
-  ]
-
-  const resources: ResourceEntry[] = [
-    {
-      id: uuid(),
-      projectId: projects[0].id,
-      date: nowIso(),
-      kind: 'time',
-      hours: 2,
-      note: 'Initial implementation',
-    },
-  ]
-
-  const next: DB = { projects, updates, todos, resources }
-  saveDB(next)
-  return next
+  return db
 }
 
 export function createProject(input: Pick<Project, 'name' | 'stage' | 'progress'>): Project {
