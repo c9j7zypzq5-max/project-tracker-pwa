@@ -21,8 +21,17 @@ class LocalDBStore {
     return () => this.listeners.delete(l)
   }
 
+  private cachedRaw: string | null = null
+  private cachedParsed = loadDB()
+
   getSnapshot = () => {
-    return loadDB()
+    // useSyncExternalStore requires referential stability when data hasn't changed.
+    const raw = localStorage.getItem('pt.db.v1')
+    if (raw === this.cachedRaw) return this.cachedParsed
+
+    this.cachedRaw = raw
+    this.cachedParsed = loadDB()
+    return this.cachedParsed
   }
 
   write = (mutate: (db: ReturnType<typeof loadDB>) => void) => {
