@@ -80,7 +80,7 @@ export function saveDB(db: DB) {
   localStorage.setItem(KEY, JSON.stringify(db))
 }
 
-function ensureCoreProjects(db: DB): boolean {
+export function ensureCoreProjects(db: DB): boolean {
   const coreNames = ['Project Tracker PWA', 'Project Tracker iOS', 'PC-Compare', 'FoodAO']
 
   let changed = false

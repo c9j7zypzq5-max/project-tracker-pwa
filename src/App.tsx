@@ -6,6 +6,7 @@ import {
   createTimeResource,
   createTodo,
   createUpdate,
+  ensureCoreProjects,
   type ID,
   type Project,
 } from './lib/storage'
@@ -157,6 +158,16 @@ export default function App() {
           db.todos.push(createTodo(selectedId, title))
           touchProject(db, selectedId)
         })
+      }}
+      onRepairData={() => {
+        write((db) => {
+          ensureCoreProjects(db as any)
+        })
+      }}
+      onResetData={() => {
+        if (!confirm('This will wipe all local data for this app. Continue?')) return
+        localStorage.removeItem('pt.db.v1')
+        location.reload()
       }}
     />
   )

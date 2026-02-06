@@ -29,6 +29,9 @@ export function HomePage(props: {
   onToggleTodo: (todoId: ID) => void
   onEditTodoTitle: (todoId: ID, title: string) => void
   onAddTodo: (title: string) => void
+
+  onRepairData: () => void
+  onResetData: () => void
 }) {
   const selected = useMemo(() => props.projects.find((p) => p.id === props.selectedId) ?? null, [props.projects, props.selectedId])
 
@@ -259,6 +262,15 @@ export function HomePage(props: {
               <div className="card">
                 <div className="cardTitle">Data</div>
                 <div className="muted">Stored locally in your browser (offline-first).</div>
+
+                <div className="smallActions" style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button onClick={props.onRepairData}>Repair / add missing core projects</button>
+                  <button onClick={props.onResetData}>Reset local data</button>
+                </div>
+
+                <div className="muted" style={{ marginTop: 10 }}>
+                  Debug: projects={props.projects.length}
+                </div>
               </div>
             </div>
           )}
