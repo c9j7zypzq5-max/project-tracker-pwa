@@ -1,239 +1,163 @@
 import { useMemo, useState } from 'react'
 import './App.css'
 import { useLocalDB } from './lib/useLocalDB'
-import { clampProgress, createProject, createResource, createUpdate, type ID, type ResourceKind } from './lib/storage'
-
-function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleString()
-  } catch {
-    return iso
-  }
-}
+import {
+  createAIResource,
+  createTimeResource,
+  createTodo,
+  createUpdate,
+  type ID,
+  type Project,
+} from './lib/storage'
+import type { Route } from './pages/types'
+import { HomePage } from './pages/HomePage'
+import { NewProjectPage } from './pages/NewProjectPage'
+import { AddUpdatePage } from './pages/AddUpdatePage'
+import { AddTimeResourcePage } from './pages/AddTimeResourcePage'
+import { AddAIResourcePage } from './pages/AddAIResourcePage'
+import { SearchPage } from './pages/SearchPage'
 
 export default function App() {
   const { db, write } = useLocalDB()
+
   const [selectedId, setSelectedId] = useState<ID | null>(db.projects[0]?.id ?? null)
+  const [route, setRoute] = useState<Route>({ name: 'home' })
 
-  const selected = useMemo(() => db.projects.find((p) => p.id === selectedId) ?? null, [db.projects, selectedId])
-  const updates = useMemo(() => db.updates.filter((u) => u.projectId === selectedId).sort((a, b) => b.date.localeCompare(a.date)), [db.updates, selectedId])
-  const resources = useMemo(() => db.resources.filter((r) => r.projectId === selectedId).sort((a, b) => b.date.localeCompare(a.date)), [db.resources, selectedId])
-
-  const totals = useMemo(() => {
-    const sums: Partial<Record<ResourceKind, number>> = {}
-    const counts: Partial<Record<ResourceKind, number>> = {}
-    for (const r of resources) {
-      counts[r.kind] = (counts[r.kind] ?? 0) + 1
-      if (typeof r.amount === 'number') sums[r.kind] = (sums[r.kind] ?? 0) + r.amount
-    }
-    return { sums, counts }
-  }, [resources])
-
-  function addProject() {
-    write((db) => {
-      const p = createProject({ name: 'New project', stage: '', progress: 0 })
-      db.projects.unshift(p)
-      setSelectedId(p.id)
+  // Keep selectedId valid as projects appear/disappear
+  const projectsSorted = useMemo(() => {
+    return [...db.projects].sort((a, b) => {
+      // Recent updated first
+      return b.updatedAt.localeCompare(a.updatedAt)
     })
+  }, [db.projects])
+
+  function touchProject(db: { projects: Project[] }, projectId: ID) {
+    const p = db.projects.find((x) => x.id === projectId)
+    if (p) p.updatedAt = new Date().toISOString()
   }
 
-  function updateProject(fields: Partial<{ name: string; stage: string; progress: number }>) {
-    if (!selectedId) return
-    write((db) => {
-      const p = db.projects.find((x) => x.id === selectedId)
-      if (!p) return
-      if (fields.name !== undefined) p.name = fields.name
-      if (fields.stage !== undefined) p.stage = fields.stage
-      if (fields.progress !== undefined) p.progress = clampProgress(fields.progress)
-      p.updatedAt = new Date().toISOString()
-    })
+  // Project editing happens in HomePage (inline fields) and calls write() directly.
+
+  if (route.name === 'newProject') {
+    return (
+      <NewProjectPage
+        onCancel={() => setRoute({ name: 'home' })}
+        onCreate={(p) => {
+          write((db) => {
+            db.projects.unshift(p)
+          })
+          setSelectedId(p.id)
+          setRoute({ name: 'home' })
+        }}
+      />
+    )
   }
 
-  function addUpdate() {
-    if (!selectedId) return
-    const text = prompt('Update text?')?.trim()
-    if (!text) return
-    const milestone = confirm('Milestone?')
-
-    write((db) => {
-      db.updates.push(createUpdate(selectedId, text, milestone))
-      const p = db.projects.find((x) => x.id === selectedId)
-      if (p) p.updatedAt = new Date().toISOString()
-    })
+  if (route.name === 'addUpdate') {
+    const p = db.projects.find((x) => x.id === route.projectId)
+    return (
+      <AddUpdatePage
+        projectName={p?.name ?? 'Project'}
+        onCancel={() => setRoute({ name: 'home' })}
+        onAdd={(text, milestone) => {
+          write((db) => {
+            db.updates.push(createUpdate(route.projectId, text, milestone))
+            touchProject(db, route.projectId)
+          })
+          setRoute({ name: 'home' })
+        }}
+      />
+    )
   }
 
-  function addResource() {
-    if (!selectedId) return
-    const kind = (prompt('Kind (time/budget/tool/service/person/ai)?', 'time')?.trim() as ResourceKind) || 'time'
-    const title = prompt('Title?')?.trim()
-    if (!title) return
-    const amountRaw = prompt('Amount (optional)?')?.trim()
-    const unit = prompt('Unit (optional)?')?.trim()
+  if (route.name === 'addTimeResource') {
+    const p = db.projects.find((x) => x.id === route.projectId)
+    return (
+      <AddTimeResourcePage
+        projectName={p?.name ?? 'Project'}
+        onCancel={() => setRoute({ name: 'home' })}
+        onAdd={(hours, note) => {
+          write((db) => {
+            db.resources.push(createTimeResource(route.projectId, hours, note))
+            touchProject(db, route.projectId)
+          })
+          setRoute({ name: 'home' })
+        }}
+      />
+    )
+  }
 
-    write((db) => {
-      const r = createResource(selectedId, kind, title)
-      if (amountRaw) {
-        const n = Number(amountRaw.replace(',', '.'))
-        if (Number.isFinite(n)) r.amount = n
-      }
-      if (unit) r.unit = unit
-      db.resources.push(r)
-      const p = db.projects.find((x) => x.id === selectedId)
-      if (p) p.updatedAt = new Date().toISOString()
-    })
+  if (route.name === 'addAIResource') {
+    const p = db.projects.find((x) => x.id === route.projectId)
+    return (
+      <AddAIResourcePage
+        projectName={p?.name ?? 'Project'}
+        onCancel={() => setRoute({ name: 'home' })}
+        onAdd={(model, tokens, euros, note) => {
+          write((db) => {
+            db.resources.push(createAIResource(route.projectId, model, tokens, euros, note))
+            touchProject(db, route.projectId)
+          })
+          setRoute({ name: 'home' })
+        }}
+      />
+    )
+  }
+
+  if (route.name === 'search') {
+    return (
+      <SearchPage
+        projects={projectsSorted.map((p) => ({ id: p.id, name: p.name }))}
+        updates={db.updates}
+        todos={db.todos}
+        resources={db.resources}
+        onCancel={() => setRoute({ name: 'home' })}
+        onOpenProject={(projectId) => {
+          setSelectedId(projectId)
+          setRoute({ name: 'home' })
+        }}
+      />
+    )
   }
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="brand">Project Tracker (PWA)</div>
-        <div className="actions">
-          <button onClick={addProject}>+ Project</button>
-        </div>
-      </header>
-
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebarTitle">Projects</div>
-          <div className="projectList">
-            {db.projects.map((p) => (
-              <button
-                key={p.id}
-                className={p.id === selectedId ? 'projectItem active' : 'projectItem'}
-                onClick={() => setSelectedId(p.id)}
-              >
-                <div className="row">
-                  <div className="name">{p.name}</div>
-                  <div className="pct">{p.progress}%</div>
-                </div>
-                {p.stage ? <div className="stage">{p.stage}</div> : null}
-                <div className="bar"><div className="barFill" style={{ width: `${p.progress}%` }} /></div>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <main className="main">
-          {!selected ? (
-            <div className="empty">Select a project</div>
-          ) : (
-            <div className="detail">
-              <div className="card">
-                <div className="cardTitle">Summary</div>
-                <label className="field">
-                  <span>Name</span>
-                  <input value={selected.name} onChange={(e) => updateProject({ name: e.target.value })} />
-                </label>
-                <label className="field">
-                  <span>Stage</span>
-                  <input value={selected.stage} onChange={(e) => updateProject({ stage: e.target.value })} />
-                </label>
-                <label className="field">
-                  <span>Progress ({selected.progress}%)</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={selected.progress}
-                    onChange={(e) => updateProject({ progress: Number(e.target.value) })}
-                  />
-                </label>
-                <div className="meta">Updated: {formatDate(selected.updatedAt)}</div>
-              </div>
-
-              <div className="rowCards">
-                <div className="card">
-                  <div className="cardTitleRow">
-                    <div className="cardTitle">Updates</div>
-                    <button onClick={addUpdate}>+ Update</button>
-                  </div>
-                  {updates.length === 0 ? (
-                    <div className="muted">No updates yet</div>
-                  ) : (
-                    <ul className="list">
-                      {updates.map((u) => (
-                        <li key={u.id} className="listItem">
-                          <div className="listTop">
-                            <div className="muted">{formatDate(u.date)}</div>
-                            {u.milestone ? <span className="pill">Milestone</span> : null}
-                          </div>
-                          <div>{u.text}</div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="cardTitleRow">
-                    <div className="cardTitle">Resources</div>
-                    <button onClick={addResource}>+ Resource</button>
-                  </div>
-
-                  <div className="totals">
-                    {Object.entries(totals.sums).length === 0 && Object.entries(totals.counts).length === 0 ? (
-                      <div className="muted">No totals yet</div>
-                    ) : (
-                      <div className="totalsGrid">
-                        {(['time', 'budget', 'tool', 'service', 'person', 'ai'] as ResourceKind[]).map((k) => {
-                          const sum = totals.sums[k]
-                          const cnt = totals.counts[k]
-                          if (sum === undefined && cnt === undefined) return null
-                          return (
-                            <div className="tot" key={k}>
-                              <div className="muted">{k}</div>
-                              <div className="totVal">{sum !== undefined ? sum.toFixed(2) : cnt}</div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {resources.length === 0 ? (
-                    <div className="muted">No resources yet</div>
-                  ) : (
-                    <ul className="list">
-                      {resources.map((r) => (
-                        <li key={r.id} className="listItem">
-                          <div className="listTop">
-                            <div className="muted">{formatDate(r.date)}</div>
-                            <span className="pill">{r.kind}</span>
-                          </div>
-                          <div className="resTitle">{r.title}</div>
-                          {typeof r.amount === 'number' ? (
-                            <div className="muted">
-                              {r.amount} {r.unit ?? ''}
-                            </div>
-                          ) : null}
-                          {r.note ? <div className="muted">{r.note}</div> : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-
-              <div className="card">
-                <div className="cardTitle">Data</div>
-                <div className="muted">Stored locally in your browser (offline-first). Add to Home Screen on iOS for an app-like experience.</div>
-                <div className="smallActions">
-                  <button
-                    onClick={() => {
-                      if (!confirm('This will wipe all local data for this app. Continue?')) return
-                      localStorage.removeItem('pt.db.v1')
-                      location.reload()
-                    }}
-                  >
-                    Reset local data
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    </div>
+    <HomePage
+      projects={projectsSorted}
+      selectedId={selectedId}
+      onSelect={(id) => setSelectedId(id)}
+      onNewProject={() => setRoute({ name: 'newProject' })}
+      onSearch={() => setRoute({ name: 'search' })}
+      updates={db.updates}
+      todos={db.todos}
+      resources={db.resources}
+      onAddUpdate={() => selectedId && setRoute({ name: 'addUpdate', projectId: selectedId })}
+      onAddTime={() => selectedId && setRoute({ name: 'addTimeResource', projectId: selectedId })}
+      onAddAI={() => selectedId && setRoute({ name: 'addAIResource', projectId: selectedId })}
+      onToggleTodo={(todoId) => {
+        write((db) => {
+          const t = db.todos.find((x) => x.id === todoId)
+          if (!t) return
+          t.done = !t.done
+          t.updatedAt = new Date().toISOString()
+          touchProject(db, t.projectId)
+        })
+      }}
+      onEditTodoTitle={(todoId, title) => {
+        write((db) => {
+          const t = db.todos.find((x) => x.id === todoId)
+          if (!t) return
+          t.title = title
+          t.updatedAt = new Date().toISOString()
+          touchProject(db, t.projectId)
+        })
+      }}
+      onAddTodo={(title) => {
+        if (!selectedId) return
+        write((db) => {
+          db.todos.push(createTodo(selectedId, title))
+          touchProject(db, selectedId)
+        })
+      }}
+    />
   )
 }
